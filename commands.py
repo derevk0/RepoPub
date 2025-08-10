@@ -9,6 +9,13 @@ from netmiko import ConnectHandler
 from netmiko.exceptions import NetmikoTimeoutException, AuthenticationException
 from io import StringIO
 
+# -------------------
+# Execute script to run commands and collect outputs from devices:
+# ↪ python script.py devices.csv commands.txt CHG123 --username admin --password password123 --mode exec
+# Diff script to compare pre and post change:
+# ↪ python script.py devices.csv commands.txt CHG123 --username admin --password password123 --mode diff
+# -------------------
+
 # Timestamp for outputs
 hour_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
@@ -82,7 +89,7 @@ def generate_diff_html(pre_lines, post_lines, host, command, output_dir, log_buf
     with open(html_path, "w") as f:
         f.write(f"<h3>{host} - {command}</h3>\n")
         f.write(html)
-    log_buf.write(f"    Diff generated: {html_path}\n")
+    log_buf.write(f"    💾 Diff generated: {html_path}\n")
     logging.info(f"{host} - Diff saved: {html_path}")
 
 # -------------------
@@ -117,7 +124,7 @@ def process_device_diff(device, commands, username, password, output_dir):
             try:
                 output = conn.send_command(command)
             except Exception as e:
-                output = f"[ERROR] Command failed: {e}"
+                output = f"[ERROR ❌] Command failed: {e}"
                 log_buf.write(f"    ERROR: {e}\n")
                 logging.error(f"{host} - Command error: {e}")
                 continue
@@ -127,18 +134,18 @@ def process_device_diff(device, commands, username, password, output_dir):
 
             if not os.path.exists(pre_path):
                 save_output(pre_path, output)
-                log_buf.write(f"    PRE-test saved to: {pre_path}\n")
+                log_buf.write(f"    💾 PRE-test saved to: {pre_path}\n")
                 logging.info(f"{host} - Pre-test saved: {command}")
             else:
                 save_output(post_path, output)
-                log_buf.write(f"    POST-test saved to: {post_path}\n")
+                log_buf.write(f"    💾 POST-test saved to: {post_path}\n")
                 logging.info(f"{host} - Post-test saved: {command}")
 
                 pre_lines = read_output(pre_path)
                 post_lines = read_output(post_path)
 
                 if pre_lines and post_lines:
-                    log_buf.write(f"    Generating diff...\n")
+                    log_buf.write(f"    🔍 Generating diff...\n")
                     generate_diff_html(pre_lines, post_lines, host, command, output_dir, log_buf)
 
         conn.disconnect()
@@ -146,10 +153,10 @@ def process_device_diff(device, commands, username, password, output_dir):
         logging.info(f"{host} - Disconnected successfully")
 
     except (AuthenticationException, NetmikoTimeoutException) as e:
-        log_buf.write(f"  Connection error: {e}\n")
+        log_buf.write(f"  ❌ Connection error: {e}\n")
         logging.error(f"{host} - Connection failed: {e}")
     except Exception as e:
-        log_buf.write(f"  Unexpected error: {e}\n")
+        log_buf.write(f"  ❌ Unexpected error: {e}\n")
         logging.error(f"{host} - Unexpected error: {e}")
 
     return log_buf.getvalue()
@@ -160,7 +167,7 @@ def process_device_exec(device, commands, username, password, output_dir):
     host = device["host"]
     device_type = device["device_type"]
     log_buf = StringIO()
-    log_buf.write(f"\n[Device: {host}]\n")
+    log_buf.write(f"\n[🔧 Device: {host}]\n")
 
     try:
         log_buf.write(f"  Connecting to {host}...\n")
@@ -185,10 +192,10 @@ def process_device_exec(device, commands, username, password, output_dir):
                 output = conn.send_command(command)
                 out_path = get_output_path(host, command, "output", output_dir)
                 save_output(out_path, output)
-                log_buf.write(f"    Output saved to: {out_path}\n")
+                log_buf.write(f"    💾 Output saved to: {out_path}\n")
                 logging.info(f"{host} - Output saved: {out_path}")
             except Exception as e:
-                log_buf.write(f"    ERROR: {e}\n")
+                log_buf.write(f"    ❌ ERROR: {e}\n")
                 logging.error(f"{host} - Command error: {e}")
 
         conn.disconnect()
@@ -196,10 +203,10 @@ def process_device_exec(device, commands, username, password, output_dir):
         logging.info(f"{host} - Disconnected successfully")
 
     except (AuthenticationException, NetmikoTimeoutException) as e:
-        log_buf.write(f"  Connection error: {e}\n")
+        log_buf.write(f"  ❌ Connection error: {e}\n")
         logging.error(f"{host} - Connection failed: {e}")
     except Exception as e:
-        log_buf.write(f"  Unexpected error: {e}\n")
+        log_buf.write(f"  ❌ Unexpected error: {e}\n")
         logging.error(f"{host} - Unexpected error: {e}")
 
     return log_buf.getvalue()
@@ -217,13 +224,13 @@ def main():
     devices = read_devices(args.devices_file)
     commands = read_commands(args.commands_file)
 
-    print(f"\n[START] Script in '{args.mode}' mode at {hour_time}...\n")
+    print(f"\n[🚀 START] Script in '{args.mode}' mode at {hour_time}...\n")
     logging.info(f"=== Script started in '{args.mode}' mode ===")
 
     futures = []
     all_console_output = []
 
-    with ThreadPoolExecutor(max_workers=10) as executor:
+    with ThreadPoolExecutor(max_workers=8) as executor:
         for device in devices:
             if args.mode == "diff":
                 futures.append(executor.submit(process_device_diff, device, commands, args.username, args.password, output_dir))
@@ -241,13 +248,9 @@ def main():
             f.write(entry + "\n")
 
     finish_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    print(f"[FINISH] Script completed at {finish_time}\n")
+    print(f"[✅ FINISH] Script completed at {finish_time}\n")
     logging.info("=== Script finished ===")
 
 if __name__ == "__main__":
     main()
 
-
-
-#python script.py devices.csv commands.txt CHG123 --username admin --password password123 --mode exec
-#python script.py devices.csv commands.txt CHG123 --username admin --password password123 --mode diff
