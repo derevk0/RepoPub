@@ -1,0 +1,45 @@
+I’ve put a full, ready-to-run Python script in the canvas called “Cisco Compliance Checker.” It:
+
+connects to a Cisco device with Netmiko
+
+pulls show running-config
+
+uses ciscoconfparse (a separate library) to perform compliance checks for logging, AAA, banner, and ACLs
+
+outputs a CSV or HTML report (your choice)
+
+How to use
+Install deps:
+
+bash
+Copy
+Edit
+pip install netmiko ciscoconfparse pyyaml
+(Optional) Create a policy file policy.yaml to customize rules (a sample is embedded at the top of the script).
+
+Run it:
+
+bash
+Copy
+Edit
+# HTML report
+python cisco_compliance_checker.py \
+  --host 192.0.2.10 --username admin --password 'p@ss' \
+  --device-type cisco_ios --output html --outfile results.html --policy policy.yaml
+
+# CSV report
+python cisco_compliance_checker.py \
+  --host 192.0.2.10 --username admin --password 'p@ss' \
+  --device-type cisco_ios --output csv --outfile results.csv
+It returns PASS/FAIL/WARN/INFO for each check and exits non-zero if any FAIL occurs (handy for CI).
+
+Want me to tweak the policy defaults or add more checks (NTP, SNMP, interfaces, crypto, etc.)?
+
+======================
+I’ve added NTP and SNMP compliance checks into the script:
+
+NTP: Verifies NTP servers are configured and optionally enforces ntp authenticate.
+
+SNMP: Flags default public/private community strings and optionally enforces SNMPv3 users.
+
+Do you want me to also update the sample policy YAML at the top so you can customize NTP/SNMP requirements, similar to the logging/AAA rules?
