@@ -13,7 +13,7 @@ Checks included:
 - Logging configuration
 - AAA configuration
 - Banner configuration
-- ACL configuration (with pattern support)
+- ACL configuration (multi-line regex pattern support)
 - NTP configuration
 - SNMP configuration
 
@@ -54,9 +54,12 @@ acls:
   check_standard_and_extended: true
   forbid_permit_ip_any_any: true
   require_patterns:
-    - "access-list 10 permit 192\\.168\\.0\\.0 0\\.0\\.0\\.255"
+    - |
+      access-list 100 permit tcp 192\.168\.1\.0 0\.0\.0\.255 any eq 80
+      access-list 100 permit tcp 192\.168\.1\.0 0\.0\.0\.255 any eq 443
   forbid_patterns:
-    - "access-list 10 permit any"
+    - |
+      access-list 100 permit ip any any
 
 ntp:
   require_servers: true
@@ -65,6 +68,7 @@ ntp:
 snmp:
   forbid_public_private: true
   require_snmpv3: false
+
 """
 
 from __future__ import annotations
@@ -117,6 +121,11 @@ class ComplianceChecker:
         return results
 
     def check_acls(self) -> List[Dict[str, str]]:
+        """
+        Enhanced ACL compliance:
+        - Supports regex patterns
+        - Supports multi-line patterns (e.g., entire ACL blocks)
+        """
         p = self.policy.get("acls", {})
         results: List[Dict[str, str]] = []
 
@@ -125,13 +134,13 @@ class ComplianceChecker:
 
         acl_objects = self.parse.find_objects(r"^access-list")
         acl_lines = [o.text for o in acl_objects]
+        acl_text = "\n".join(acl_lines)
 
         if not acl_lines:
             results.append(self._result("ACL - presence", "FAIL", "no ACLs found"))
             return results
 
-        # Basic check
-        results.append(self._result("ACL - presence", "PASS", f"{len(acl_lines)} ACL entries found", "\n".join(acl_lines)))
+        results.append(self._result("ACL - presence", "PASS", f"{len(acl_lines)} ACL entries found", acl_text))
 
         # Forbid permit ip any any
         if p.get("forbid_permit_ip_any_any", False):
@@ -141,21 +150,19 @@ class ComplianceChecker:
             else:
                 results.append(self._result("ACL - permit ip any any", "PASS", "no 'permit ip any any' statements"))
 
-        # Pattern matching
+        # Pattern matching (multi-line with regex)
         required_patterns = p.get("require_patterns", [])
         forbidden_patterns = p.get("forbid_patterns", [])
 
         for pattern in required_patterns:
-            matched = [a for a in acl_lines if re.search(pattern, a)]
-            if matched:
-                results.append(self._result("ACL - required pattern", "PASS", f"pattern '{pattern}' found", "\n".join(matched)))
+            if re.search(pattern, acl_text, re.MULTILINE | re.DOTALL):
+                results.append(self._result("ACL - required pattern", "PASS", f"pattern '{pattern}' found"))
             else:
                 results.append(self._result("ACL - required pattern", "FAIL", f"pattern '{pattern}' missing"))
 
         for pattern in forbidden_patterns:
-            matched = [a for a in acl_lines if re.search(pattern, a)]
-            if matched:
-                results.append(self._result("ACL - forbidden pattern", "FAIL", f"pattern '{pattern}' present", "\n".join(matched)))
+            if re.search(pattern, acl_text, re.MULTILINE | re.DOTALL):
+                results.append(self._result("ACL - forbidden pattern", "FAIL", f"pattern '{pattern}' present"))
             else:
                 results.append(self._result("ACL - forbidden pattern", "PASS", f"pattern '{pattern}' not found"))
 
