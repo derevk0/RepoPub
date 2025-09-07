@@ -22,6 +22,16 @@ banner:
   patterns:
     - "^banner motd"
 
+#acl_check:
+#  enabled: true
+#  name: "Extended ACL 100 regex"
+#  patterns:
+#    - |
+#      (?ms)^ip access-list extended 100
+#      \n\s*10 permit tcp 192\.168\.1\.0 0\.0\.0\.255 any eq www
+#      \n\s*20 permit tcp 192\.168\.1\.0 0\.0\.0\.255 any eq 443
+#      \n(?=^ip access-list|^interface|^router|\Z)
+
 # acls:
   # enabled: true
   # name: "ACL 100 - Web Access"
