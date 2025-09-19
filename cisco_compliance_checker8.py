@@ -85,24 +85,23 @@ class ComplianceChecker:
 
     def _prettify(self, text: str) -> str:
         """Make regex or config text look like clean CLI config."""
-        lines = text.strip().splitlines()
-        clean_lines = []
-        for line in lines:
-            line = line.strip()
-            line = line.replace(r"\.", ".")
-            line = line.replace(r"\Z", "")
-            line = re.sub(r"\\s\*", " ", line)
-            line = re.sub(r"\\s", " ", line)
-            line = re.sub(r"\(\?[imsx-]+\)", "", line)
-            line = re.sub(r"\(\?[:=!].*?\)", "", line)
-            line = re.sub(r"[\\^$+*?]", "", line)
-            line = re.sub(r"\[[^\]]*\]", "", line)
-            line = re.sub(r"\([^)]*\)", "", line)
-            line = re.sub(r"\{[^}]*\}", "", line)
-            line = re.sub(r"\s+", " ", line)
-            if line:
-                clean_lines.append(line)
-        return "\n".join(clean_lines)
+        # Replace escaped newlines with real line breaks
+        text = text.replace(r"\n", "\n")
+        # Remove regex flags and constructs
+        text = re.sub(r"\(\?[imsx-]+\)", "", text)       # (?ms), etc.
+        text = re.sub(r"\(\?[:=!].*?\)", "", text)      # non-capturing/lookahead
+        text = re.sub(r"\\Z", "", text)
+        text = re.sub(r"\\s\*", " ", text)
+        text = re.sub(r"\\s", " ", text)
+        text = re.sub(r"\\\.", ".", text)
+        text = re.sub(r"[\\^$+*?]", "", text)
+        text = re.sub(r"\[[^\]]*\]", "", text)
+        text = re.sub(r"\([^)]*\)", "", text)
+        text = re.sub(r"\{[^}]*\}", "", text)
+
+        # Clean each line individually
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        return "\n".join(lines)
 
     def check_section(
         self, section: str, name: str, patterns: List[str], section_match: Optional[str] = None
@@ -287,21 +286,37 @@ def write_html(results: List[Dict[str, str]], outfile: str, suffix: str, source_
             f.write(f"<tr><td>{section}</td><td class='{css_class}'>{summary_status}</td></tr>\n")
         f.write("</table><br>\n")
 
-        # Details
+        # Detailed section tables
         for section, rows in grouped.items():
             f.write(f"<details><summary>{section}</summary>\n")
             f.write("<table><tr><th>Name</th><th>Status</th><th>Details</th></tr>\n")
-            prev_name = None
-            for row in rows:
-                name_val = row["name"] if row["name"] != prev_name else ""
-                prev_name = row["name"]
-                css_class = (
-                    "status-pass" if row["status"] == "PASS"
-                    else "status-fail" if row["status"] == "FAIL"
-                    else "status-error"
+
+            i = 0
+            n = len(rows)
+            while i < n:
+                name = rows[i]["name"]
+                j = i
+                while j < n and rows[j]["name"] == name:
+                    j += 1
+                rowspan = j - i
+
+                row = rows[i]
+                css_class = "status-pass" if row["status"] == "PASS" else (
+                    "status-fail" if row["status"] == "FAIL" else "status-error"
                 )
                 details_html = row["details"].replace("\n", "<br>")
-                f.write(f"<tr><td>{name_val}</td><td class='{css_class}'>{row['status']}</td><td>{details_html}</td></tr>\n")
+                f.write(f"<tr><td rowspan='{rowspan}'>{name}</td><td class='{css_class}'>{row['status']}</td><td>{details_html}</td></tr>\n")
+
+                for k in range(i+1, j):
+                    row_k = rows[k]
+                    css_class = "status-pass" if row_k["status"] == "PASS" else (
+                        "status-fail" if row_k["status"] == "FAIL" else "status-error"
+                    )
+                    details_html_k = row_k["details"].replace("\n", "<br>")
+                    f.write(f"<tr><td class='{css_class}'>{row_k['status']}</td><td>{details_html_k}</td></tr>\n")
+
+                i = j
+
             f.write("</table></details><br>\n")
 
         f.write("</body></html>\n")
