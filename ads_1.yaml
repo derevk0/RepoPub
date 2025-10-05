@@ -1,0 +1,215 @@
+trigger: none
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+# ---------------- Pipeline Variables ----------------
+variables:
+  # Non-sensitive pipeline parameters (editable in UI)
+  host: ''
+  device_list: ''              # Path to text file (optional)
+  device_type: 'cisco_ios'
+  config_file: ''              # Local running-config (optional)
+  policy: 'policy.yaml'
+  output: 'html'               # 'csv' or 'html'
+  outfile: 'compliance_report.html'
+  outdir: 'output'
+  save_running_config: 'true'  # 'true' or 'false'
+  azureKeyVaultName: 'NetworkComplianceVault'  # <-- Your Key Vault name here
+# -----------------------------------------------------
+
+stages:
+- stage: ComplianceCheck
+  displayName: "Run Cisco Compliance Checker"
+  jobs:
+  - job: RunCompliance
+    displayName: "Execute Compliance Checker"
+    steps:
+
+    # ---------- Step 1: Retrieve Secrets from Azure Key Vault ----------
+    - task: AzureKeyVault@2
+      inputs:
+        azureSubscription: 'My-Azure-Connection-Service'   # <-- Service connection name
+        KeyVaultName: '$(azureKeyVaultName)'
+        SecretsFilter: 'username,password,secret'          # The names of secrets in Key Vault
+      name: FetchSecrets
+      displayName: "Retrieve Credentials from Azure Key Vault"
+
+    # ---------- Step 2: Set Up Python ----------
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '3.x'
+      displayName: "Set up Python Environment"
+
+    # ---------- Step 3: Install Dependencies ----------
+    - script: |
+        python -m pip install --upgrade pip
+        pip install netmiko pyyaml
+      displayName: "Install Python Dependencies"
+
+    # ---------- Step 4: Prepare Output Directory ----------
+    - script: |
+        echo "Creating output directory if not exists..."
+        mkdir -p $(outdir)
+      displayName: "Prepare Output Directory"
+
+    # ---------- Step 5: Run Compliance Checker ----------
+    - script: |
+        echo "Running Compliance Checker..."
+        python compliance_checker.py \
+          $(if [ "$(host)" != "" ]; then echo "--host $(host)"; fi) \
+          $(if [ "$(device_list)" != "" ]; then echo "--device-list $(device_list)"; fi) \
+          $(if [ "$(username)" != "" ]; then echo "--username $(username)"; fi) \
+          $(if [ "$(password)" != "" ]; then echo "--password $(password)"; fi) \
+          $(if [ "$(secret)" != "" ]; then echo "--secret $(secret)"; fi) \
+          $(if [ "$(device_type)" != "" ]; then echo "--device-type $(device_type)"; fi) \
+          $(if [ "$(config_file)" != "" ]; then echo "--config-file $(config_file)"; fi) \
+          --policy $(policy) \
+          --output $(output) \
+          --outfile $(outfile) \
+          --outdir $(outdir) \
+          $(if [ "$(save_running_config)" == "false" ]; then echo "--no-save-running-config"; fi)
+      displayName: "Run Python Compliance Checker"
+
+    # ---------- Step 6: Publish Reports ----------
+    - task: PublishBuildArtifacts@1
+      condition: succeededOrFailed()
+      inputs:
+        pathToPublish: '$(outdir)'
+        artifactName: 'compliance_reports'
+        publishLocation: 'Container'
+      displayName: "Publish Compliance Reports"
+
+#===============================================================================================================================================================================================================
+trigger: none
+
+pool:
+  vmImage: 'windows-latest'
+
+# ---------------- Pipeline Variables ----------------
+variables:
+  # Non-sensitive pipeline parameters (editable in UI)
+  host: ''
+  device_list: ''              # Path to text file (optional)
+  device_type: 'cisco_ios'
+  config_file: ''              # Local running-config (optional)
+  policy: 'policy.yaml'
+  output: 'html'               # 'csv' or 'html'
+  outfile: 'compliance_report.html'
+  outdir: 'output'
+  save_running_config: 'true'  # 'true' or 'false'
+  send_email: 'false'          # 'true' or 'false'
+  email_to: 'network-team@example.com'
+  azureKeyVaultName: 'NetworkComplianceVault'  # <-- Your Key Vault name here
+# -----------------------------------------------------
+
+stages:
+# =================== Stage 1: Compliance Check ===================
+- stage: ComplianceCheck
+  displayName: "Run Cisco Compliance Checker"
+  jobs:
+  - job: RunCompliance
+    displayName: "Execute Compliance Checker"
+    steps:
+
+    # ---------- Step 1: Retrieve Secrets from Azure Key Vault ----------
+    - task: AzureKeyVault@2
+      inputs:
+        azureSubscription: 'My-Azure-Connection-Service'   # <-- Service connection name
+        KeyVaultName: '$(azureKeyVaultName)'
+        SecretsFilter: 'username,password,secret'          # The names of secrets in Key Vault
+      name: FetchSecrets
+      displayName: "Retrieve Credentials from Azure Key Vault"
+
+    # ---------- Step 2: Set Up Python ----------
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '3.x'
+      displayName: "Set up Python Environment"
+
+    # ---------- Step 3: Install Dependencies ----------
+    - powershell: |
+        python -m pip install --upgrade pip
+        pip install netmiko pyyaml
+      displayName: "Install Python Dependencies"
+
+    # ---------- Step 4: Prepare Output Directory ----------
+    - powershell: |
+        Write-Host "Creating output directory if not exists..."
+        New-Item -ItemType Directory -Force -Path "$(outdir)" | Out-Null
+      displayName: "Prepare Output Directory"
+
+    # ---------- Step 5: Run Compliance Checker ----------
+    - powershell: |
+        Write-Host "Running Compliance Checker..."
+        $args = @()
+
+        if ("$(host)" -ne "") { $args += "--host $(host)" }
+        if ("$(device_list)" -ne "") { $args += "--device-list $(device_list)" }
+        if ("$(username)" -ne "") { $args += "--username $(username)" }
+        if ("$(password)" -ne "") { $args += "--password $(password)" }
+        if ("$(secret)" -ne "") { $args += "--secret $(secret)" }
+        if ("$(device_type)" -ne "") { $args += "--device-type $(device_type)" }
+        if ("$(config_file)" -ne "") { $args += "--config-file $(config_file)" }
+
+        $args += "--policy $(policy)"
+        $args += "--output $(output)"
+        $args += "--outfile $(outfile)"
+        $args += "--outdir $(outdir)"
+
+        if ("$(save_running_config)" -eq "false") {
+          $args += "--no-save-running-config"
+        }
+
+        python compliance_checker.py @args
+      displayName: "Run Python Compliance Checker"
+
+    # ---------- Step 6: Publish Reports ----------
+    - task: PublishBuildArtifacts@1
+      condition: succeededOrFailed()
+      inputs:
+        pathToPublish: '$(outdir)'
+        artifactName: 'compliance_reports'
+        publishLocation: 'Container'
+      displayName: "Publish Compliance Reports"
+
+# =================== Stage 2: Email Notification ===================
+- stage: EmailNotification
+  displayName: "Send Compliance Report via Email"
+  dependsOn: ComplianceCheck
+  condition: and(succeededOrFailed(), eq(variables['send_email'], 'true'))
+  jobs:
+  - job: SendEmail
+    displayName: "Send Email with Compliance Report"
+    steps:
+    - powershell: |
+        Write-Host "Preparing to send email report..."
+
+        $reportPath = "$(Pipeline.Workspace)\compliance_reports"
+        $latestFile = Get-ChildItem -Path $reportPath -Recurse | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+
+        if ($null -eq $latestFile) {
+            Write-Host "No report found to send."
+            exit 0
+        }
+
+        $smtpServer = "smtp.office365.com"
+        $smtpPort = 587
+        $from = "noreply@example.com"
+        $to = "$(email_to)"
+        $subject = "Cisco Compliance Report - $(Build.BuildNumber)"
+        $body = "Attached is the latest Cisco Compliance Report from Azure DevOps."
+
+        Write-Host "Sending email to $to with file: $($latestFile.FullName)"
+
+        Send-MailMessage `
+          -From $from `
+          -To $to `
+          -Subject $subject `
+          -Body $body `
+          -SmtpServer $smtpServer `
+          -Port $smtpPort `
+          -UseSsl `
+          -Attachments $latestFile.FullName `
+          -Credential (New-Object System.Management.Automation.PSCredential("$(username)", (ConvertTo-SecureString "$(password)" -AsPlainText -Force)))
+      displayName: "Send Email with Report"
